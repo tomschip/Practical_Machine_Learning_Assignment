@@ -1,0 +1,85 @@
+---
+title: "Prediction Assignment"
+author: "Thomas Schipritt"
+date: "August 1, 2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r proj_summary, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Goal
+
+In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict whether or not they're doing a dumbell curl correctly, using the classe variable in the data set.  
+
+Participants were asked to perform one set of 10 repetitionsof the Unilateral Dumbbell Biceps Curl in five different fash-ions: exactly according to the specification (Class A), throw-ing the elbows to the front (Class B), lifting the dumbbellonly halfway (Class C), lowering the dumbbell only halfway(Class D) and throwing the hips to the front (Class E). 
+
+
+#Step 1 - Getting Data
+
+```{r get_data}
+library(caret)
+library(rattle)
+set.seed(4116)
+
+URLtrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLtest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(URLtrain), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(URLtest), na.strings=c("NA","#DIV/0!",""))
+
+
+```
+
+#Step 2 - Cleaning and Splitting Data for Cross Validation
+Removing irrelevant variables, near zero variance variables, and any variables with a NA% of > 90% then splitting the training set into a train and test set
+
+```{r clean_data}
+
+training <- training[,-c(1:7)]
+nzv <- nearZeroVar(training, saveMetrics = TRUE)
+nzvvar <- rownames(nzv[nzv$nzv == TRUE,])
+remove <- names(training) %in% nzvvar
+training <- training[!remove]
+
+narate <- data.frame(colSums(is.na(training))/nrow(training))
+colnames(narate) <- "NArate"
+narate$rnames <- rownames(narate)
+hiNA <- narate$rnames[narate$NArate > .9]
+removeNA <- names(training) %in% hiNA
+training <- training[!removeNA]
+
+intrain <- createDataPartition(y=training$classe, p =.75, list = FALSE)
+modtrain <- training[intrain,]
+modtest <- training[-intrain,]
+
+```
+
+
+
+#Step 2 - Model Fit Tree and Accuracy
+
+```{r rpart_Model_Fit}
+rpartmodfit <- train(classe ~ ., data = modtrain, method = "rpart")
+fancyRpartPlot(rpartmodfit$finalModel)
+rpartpredict <- predict(rpartmodfit, newdata=modtest)
+confusionMatrix(rpartpredict, modtest$classe)
+
+```
+
+The result is <50% accuracy, so let's try a different approach.
+
+#Step 3 - Model Fit Random Forest and Accuracy 
+```{r rf_Model_Fit}
+library(randomForest)
+rfmodfit <- randomForest(classe ~., data = modtrain)
+rfpredict <- predict(rfmodfit, newdata = modtest)
+confusionMatrix(rfpredict, modtest$classe)
+print(rfmodfit)
+```
+
+The random forest result is >99% accuracy.  The out of estimate error rate is .51%.  We would expect the test data to be slightly higher than that do to model over fitting.
+
+
